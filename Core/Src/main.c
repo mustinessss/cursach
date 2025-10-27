@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +31,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MasSize 416
+#define ADCIn MasSize + 200
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,7 +52,15 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+const uint32_t Bark[MasSize] = {1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,2075,2400,2700,2964,3179,3340,3439,3472,3439,3340,3179,2964,2700,2400,2075,1736,1397,1072,772,508,293,132,33,0,33,132,293,508,772,1072,1397};
+int32_t buff[ADCIn];
+uint16_t num = 0;
+volatile int32_t corr = 0;
+volatile uint16_t distance = 0;
+uint8_t speakerNum = 1;
+unsigned char a, buf[3];
+unsigned char micdebug[4];
+volatile int32_t debug1 = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,7 +73,8 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-
+void autocorr(int32_t *mas1, const uint32_t *mas2);
+int32_t calculateAverage(int32_t *mas1, int32_t length);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -106,13 +117,69 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  // Включение первого динамика
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
+  HAL_Delay(1000);
 
+  // Инициализация DMA
+  HAL_TIM_Base_Start(&htim2);
+  HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)Bark, MasSize, DAC_ALIGN_12B_R);
+
+  // Инициализация ADC
+  HAL_ADC_Start_IT(&hadc1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      if(num==ADCIn)
+      {
+          // Вычисление постоянной составляющей
+          int32_t mean = calculateAverage(buff,ADCIn);
+          for(uint16_t c = 0;c<ADCIn;c++)
+          {
+              buff[c] = buff[c]-mean;
+          }
+
+          // Взаимная корреляция
+          autocorr(buff,Bark);
+
+          num=0;
+
+          // Передача расстояния по UART
+          for( a=0; a<3; a++ ) buf[a] = '0';
+          while( distance>=100 ) { buf[0]++; distance = distance-100; }
+          while( distance>=10 ) { buf[1]++; distance = distance-10; }
+          buf[2] += distance;
+
+          if (speakerNum==0){HAL_UART_Transmit(&huart2,"s\n", 2, 1000);}
+          HAL_UART_Transmit(&huart2,(uint8_t*)buf, a, 1000);
+          HAL_UART_Transmit(&huart2,"\n", 1, 1000);
+          HAL_Delay(30);
+
+          // Индикация и переключение динамика
+          HAL_GPIO_TogglePin(GPIOA,GPIO_PIN_5);
+
+          speakerNum++;
+          if (speakerNum > 2){speakerNum = 0;}
+
+          // Включение следующего динамика
+          switch(speakerNum)
+          {
+          case 0: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET); break;
+          case 1: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET); break;
+          case 2: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET); break;
+          }
+
+          // Перезапуск DMA и ADC
+          HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)Bark, MasSize, DAC_ALIGN_12B_R);
+          HAL_ADC_Start_IT(&hadc1);
+      }
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -444,7 +511,56 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void autocorr(int32_t *mas1, const uint32_t *mas2)
+{
+    volatile int32_t maxcorr = 0;
+    volatile int32_t ans = 0;
+    volatile int32_t sdvig = 0;
 
+    for(uint16_t t = 0; t<ADCIn; t++)
+    {
+        volatile int32_t vnutr = 0;
+        for(volatile uint16_t i = 0;i<MasSize;i++)
+        {
+            sdvig = i+t;
+            if(sdvig<ADCIn)
+            {
+                vnutr=vnutr+(mas1[sdvig])*((int16_t)mas2[i]-1736);
+            }
+        }
+        corr = vnutr;
+        if(corr>maxcorr){maxcorr=corr;ans=t;}
+    }
+    distance=round(ans*33/16);
+}
+
+int32_t calculateAverage(int32_t *mas1, int32_t length) {
+    int sum = 0;
+    for (int i = 0; i < length; i++) {
+        sum += mas1[i];
+    }
+    int average = sum / length;
+    return average;
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if(hadc->Instance == ADC1)
+    {
+        if(num<(ADCIn))
+        {
+            buff[num]=HAL_ADC_GetValue(&hadc1);
+            num++;
+        }
+        else
+        {
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
+            HAL_ADC_Stop_IT(&hadc1);
+        }
+    }
+}
 /* USER CODE END 4 */
 
 /**
