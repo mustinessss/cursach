@@ -57,6 +57,7 @@ int32_t buff[ADCIn];
 uint16_t num = 0;
 volatile int32_t corr = 0;
 volatile uint16_t distance = 0;
+volatile uint8_t adcReady = 0;
 uint8_t speakerNum = 1;
 unsigned char a, buf[3];
 unsigned char micdebug[4];
@@ -117,6 +118,13 @@ int main(void)
   MX_TIM3_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  HAL_UART_Transmit(&huart2,(uint8_t*)"System start\r\n", 16,100);
+
+  if(HAL_TIM_Base_Start(&htim3)==HAL_OK){
+	HAL_UART_Transmit(&huart2, (uint8_t*)"Tim3 start\r\n", 14,100);
+  } else{
+	HAL_UART_Transmit(&huart2, (uint8_t*)"Tim3 error\r\n", 12,100);
+  }
   // Включаем первый динамик
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
@@ -140,17 +148,19 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  //      debug1 = 0;
-	        if(num==ADCIn)
+	        //debug1 = 0;
+	        if(adcReady)//
 	        {
-	  //          for(uint16_t c = 0;c<ADCIn;c++)
-	  //          {
-	  //              debug1 = -buff[c];
-	  //              HAL_Delay(3);
-	  //          }
+	        	adcReady = 0;
+	        	HAL_UART_Transmit(&huart2,(uint8_t*)"Processssss\r\n", 16,100);
+	        	/*           for(uint16_t c = 0;c<ADCIn;c++)
+	          {
+	                debug1 = -buff[c];
+	                HAL_Delay(3);
+	            }*/
 
 	            // Передача значений принятых с микрофона по UART. Раскомментировать при отладке.
-	        	/*
+
 	            for(uint16_t c = 0;c<ADCIn;c++)
 	            {
 	                debug1 = buff[c];
@@ -162,7 +172,7 @@ int main(void)
 	                HAL_UART_Transmit(&huart2,(uint8_t*)micdebug, a, 1000);
 	                HAL_UART_Transmit(&huart2,(uint8_t*)"\n", 1, 1000);
 	            }
-				*/
+
 	            // Конец сегмента для отладки
 
 	            // Вычисление постоянной составляющей и взаимной корреляции
@@ -179,7 +189,7 @@ int main(void)
 	            num=0;
 
 	            // Пересылка расстояния по UART. Закомментировать при отладке
-
+	            /*
 	            for( a=0; a<3; a++ ) buf[a] = '0';
 	            while( distance>=100 )     { buf[0]++; distance = distance-100; }
 	            while( distance>=10 )       { buf[1]++; distance = distance-10; }
@@ -189,7 +199,7 @@ int main(void)
 	            HAL_UART_Transmit(&huart2,(uint8_t*)buf, a, 1000);
 	            HAL_UART_Transmit(&huart2,(uint8_t*)"\n", 1, 1000);
 	            HAL_Delay(30);
-
+				*/
 	            // Конец сегмента передачи расстояния по UART
 
 	            // Переключаем светодиод для индикации следующего замера
@@ -206,7 +216,9 @@ int main(void)
 	            /*(4)Только третий*/
 	            //speakerNum=2;
 
-	            if (speakerNum > 2){speakerNum = 0;}
+	            if (speakerNum > 2){
+	  					speakerNum = 0;
+	  					}
 
 	            // Включаем необходимый динамик
 	            switch(speakerNum)
@@ -618,7 +630,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance==TIM1)
     {
-       /*
+
        num=0;
 
        // Переключаем светодиод для индикации следующего замера
@@ -648,7 +660,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
        HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)Bark, MasSize, DAC_ALIGN_12B_R);
        // Повторно запускаем ADC
        HAL_ADC_Start_IT(&hadc1);
-       */
+
     }
 }
 /* USER CODE END 4 */
