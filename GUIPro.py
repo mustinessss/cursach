@@ -139,47 +139,57 @@ class TrilaterationApp:
         self.stop_button.config(state=tk.DISABLED)
 
     def update_plot(self):
-        if self.running:   
-            # Чтение расстояний от UART порта
-            self.distances = []
-            while True:
-                start=self.ser.readline()
-                start = start.decode('utf8')
-                if start == 's\n':
-                    print('start of conv\n')
-                    break
-            while len(self.distances) < 3:
-                if self.ser.in_waiting > 0:
-                    # Чтение данных из порта
-                    data = self.ser.readline()
-                    data = data.decode('utf8')
-                    try:
-                        distance = float(data)* self.slider_var.get()  # Преобразовать прочитанные данные в число
-                        self.distances.append(distance)
-                    except ValueError:
-                        continue
-                    print(data) 
-            # Вычисление координат неизвестной точки
-            result = self.trilaterate(self.point1, self.point2, self.point3, self.distances[0], self.distances[1], self.distances[2])
-
-            # Обновление орбит и координат неизвестной точки
-            self.circle1.set_radius(self.distances[0])
-            self.circle2.set_radius(self.distances[1])
-            self.circle3.set_radius(self.distances[2])
-            self.unknown_point.set_data(result[0], result[1])
-            self.coordinate_value.set(f"({result[0]:.2f} мм, {result[1]:.2f} мм)")
-
-            if not self.plot_initialized:
-                self.plot_initialized = True
-                self.ax.set_xlim([-50, 300])
-                self.ax.set_ylim([-50, 300])
-                #self.ax.relim()
-                self.ax.legend()
-
-            # Обновление графика
-            self.ax.figure.canvas.draw()
-        # Планирование следующего обновления графика через 100 миллисекунд
-        self.root.after(10, self.update_plot)
+        if self.running and self.ser and self.ser.in_waiting > 0:   
+            try:
+                # Чтение данных из порта
+                data = self.ser.readline().decode('utf8', errors='ignore').strip()
+                print(f"Получены данные: {data}")  # Для отладки
+                
+                # Если получили маркер начала 's'
+                if data == 's':
+                    self.distances = []  # Сбрасываем массив расстояний
+                    print("Начало новой передачи")
+                    
+                    # Читаем следующие 3 строки с расстояниями
+                    for i in range(3):
+                        while self.ser.in_waiting == 0:
+                            pass  # Ждем данные
+                        dist_data = self.ser.readline().decode('utf8', errors='ignore').strip()
+                        try:
+                            distance = float(dist_data) * self.slider_var.get()
+                            self.distances.append(distance)
+                            print(f"Расстояние {i+1}: {distance}")
+                        except ValueError:
+                            print(f"Ошибка преобразования: {dist_data}")
+                            continue
+                    
+                    # Если получили все 3 расстояния
+                    if len(self.distances) == 3:
+                        # Вычисление координат неизвестной точки
+                        result = self.trilaterate(self.point1, self.point2, self.point3, 
+                                                self.distances[0], self.distances[1], self.distances[2])
+                        
+                        # Обновление орбит и координат неизвестной точки
+                        self.circle1.set_radius(self.distances[0])
+                        self.circle2.set_radius(self.distances[1])
+                        self.circle3.set_radius(self.distances[2])
+                        self.unknown_point.set_data([result[0]], [result[1]])
+                        self.coordinate_value.set(f"({result[0]:.2f} мм, {result[1]:.2f} мм)")
+                        
+                        if not self.plot_initialized:
+                            self.plot_initialized = True
+                            self.ax.set_xlim([-50, 300])
+                            self.ax.set_ylim([-50, 300])
+                            self.ax.legend()
+                        
+                        # Обновление графика
+                        self.ax.figure.canvas.draw()
+                        
+            except Exception as e:
+                print(f"Ошибка обработки данных: {e}")
+        
+        # Планирование следующего обновления графика
+        self.root.after(100, self.update_plot)  # Увеличил задержку до 100 мс
 
     def trilaterate(self, p1, p2, p3, d1, d2, d3):
         x1, y1 = p1
