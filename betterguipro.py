@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Nov 14 01:29:42 2025
-
-@author: ashst
-"""
-
 import tkinter as tk
 import serial
 import serial.tools.list_ports
@@ -13,13 +7,15 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle
-import tkinter.messagebox
+import threading
+import queue
 
 class TrilaterationApp:
     def __init__(self):
         self.ser = None
         self.running = False
-        self.distances = [0, 0, 0]  # Инициализируем нулями
+        self.distances = [0, 0, 0]
+        self.data_queue = queue.Queue()  # Очередь для данных
 
         # Известные точки
         self.point1 = (0, 250)
@@ -44,7 +40,7 @@ class TrilaterationApp:
         self.ax.add_patch(self.circle3)
 
         # Отображение неизвестной точки
-        self.unknown_point, = self.ax.plot([], [], 'ko', markersize=8, label='Микрофон')
+        self.unknown_point, = self.ax.plot([0], [0], 'ko', markersize=10, label='Микрофон', alpha=0.0)
 
         # Настройка графика
         self.ax.set_aspect('equal')
@@ -53,16 +49,17 @@ class TrilaterationApp:
         self.ax.set_xlabel('X (мм)')
         self.ax.set_ylabel('Y (мм)')
         self.ax.legend()
-        self.ax.grid(True, alpha=0.3)  # Добавляем сетку для удобства
+        self.ax.grid(True, alpha=0.3)
 
         # Создание GUI
         self.root = tk.Tk()
         self.root.geometry("800x600")
         self.root.title("Обработка данных учебного макета")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # Обработчик закрытия окна
         
         # Получение доступных портов
         self.available_ports = [port.device for port in serial.tools.list_ports.comports()]
-        print("Доступные порты:", self.available_ports)  # Для отладки
+        print("Доступные порты:", self.available_ports)
 
         # Элементы управления
         self.coordinate_units = tk.Label(self.root, text="COM порт:")
@@ -95,7 +92,7 @@ class TrilaterationApp:
         self.calibration_label.place(x=612, y=150)
 
         self.slider = tk.Scale(self.root, variable=self.slider_var, orient=tk.HORIZONTAL, 
-                              from_=0.5, to=1.5, resolution=0.01, command=self.slider_changed)
+                              from_=0.5, to=1.5, resolution=0.01)
         self.slider.config(width=20, length=160)
         self.slider.place(x=611, y=170)
 
@@ -122,7 +119,13 @@ class TrilaterationApp:
         selected_port = self.port_var.get()
         if selected_port:
             try:
-                self.ser = serial.Serial(selected_port, 9600, timeout=1)
+                self.ser = serial.Serial(
+                    port=selected_port,
+                    baudrate=9600,
+                    timeout=0.1,  # Таймаут для неблокирующего чтения
+                    write_timeout=1,
+                    inter_byte_timeout=0.1
+                )
                 self.ser.reset_input_buffer()
                 
                 self.start_button.config(state=tk.DISABLED)
@@ -130,37 +133,41 @@ class TrilaterationApp:
                 self.stop_button.config(state=tk.NORMAL)
                 self.running = True
                 self.status_var.set("Подключено")
+                
+                # Запускаем отдельный поток для чтения данных
+                self.reading_thread = threading.Thread(target=self.read_serial_data, daemon=True)
+                self.reading_thread.start()
+                
+                # Запускаем обновление GUI
                 self.update_plot()
                 
             except serial.SerialException as e:
                 error_msg = f"Ошибка подключения к {selected_port}:\n{str(e)}"
                 print(error_msg)
                 self.status_var.set("Ошибка подключения")
-                tk.messagebox.showerror("Ошибка", error_msg)
 
-    def pause_program(self):
-        self.running = not self.running
-        if self.running:
-            self.pause_button.config(text="Пауза")
-            self.status_var.set("Работает")
-        else:
-            self.pause_button.config(text="Продолжить")
-            self.status_var.set("На паузе")
-
-    def stop_program(self):
-        self.running = False
-        if self.ser and self.ser.is_open:
-            self.ser.close()
-        self.start_button.config(state=tk.NORMAL)
-        self.pause_button.config(state=tk.DISABLED)
-        self.stop_button.config(state=tk.DISABLED)
-        self.status_var.set("Отключено")
-
-    def update_plot(self):
-        if self.running and self.ser:
+    def read_serial_data(self):
+        """Чтение данных из COM-порта в отдельном потоке"""
+        while self.running and self.ser and self.ser.is_open:
             try:
                 if self.ser.in_waiting > 0:
                     data = self.ser.readline().decode('utf8', errors='ignore').strip()
+                    if data:
+                        # Помещаем данные в очередь
+                        self.data_queue.put(data)
+            except Exception as e:
+                print(f"Ошибка чтения из порта: {e}")
+                break
+            # Небольшая пауза чтобы не грузить процессор
+            threading.Event().wait(0.01)
+
+    def update_plot(self):
+        """Обновление GUI из основного потока"""
+        if self.running:
+            # Обрабатываем все данные из очереди
+            while not self.data_queue.empty():
+                try:
+                    data = self.data_queue.get_nowait()
                     print(f"Получены данные: '{data}'")
                     
                     if data and ',' in data:
@@ -183,20 +190,52 @@ class TrilaterationApp:
                                 self.circle1.set_radius(self.distances[0])
                                 self.circle2.set_radius(self.distances[1])
                                 self.circle3.set_radius(self.distances[2])
+                                
+                                # Обновление точки микрофона
                                 self.unknown_point.set_data([result[0]], [result[1]])
+                                self.unknown_point.set_alpha(1.0)
+                                self.unknown_point.set_markersize(10)
+                                
+                                # Обновление текста координат
                                 self.coordinate_value.set(f"({result[0]:.2f} мм, {result[1]:.2f} мм)")
                                 
+                                # Принудительное обновление всего графика
                                 self.canvas.draw_idle()
                                 
                         except ValueError as e:
                             print(f"Ошибка преобразования: {e}")
-                
-            except Exception as e:
-                print(f"Ошибка: {e}")
-                self.status_var.set("Ошибка чтения")
+                            
+                except queue.Empty:
+                    break
         
+        # Планируем следующее обновление
         if self.running:
-            self.root.after(50, self.update_plot)  # Уменьшил задержку для отзывчивости
+            self.root.after(100, self.update_plot)  # Увеличил интервал до 100 мс
+
+    def pause_program(self):
+        self.running = not self.running
+        if self.running:
+            self.pause_button.config(text="Пауза")
+            self.status_var.set("Работает")
+            # Перезапускаем обновление GUI
+            self.update_plot()
+        else:
+            self.pause_button.config(text="Продолжить")
+            self.status_var.set("На паузе")
+
+    def stop_program(self):
+        self.running = False
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+        self.start_button.config(state=tk.NORMAL)
+        self.pause_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.DISABLED)
+        self.status_var.set("Отключено")
+
+    def on_closing(self):
+        """Обработчик закрытия окна"""
+        self.stop_program()
+        self.root.destroy()
 
     def trilaterate(self, p1, p2, p3, d1, d2, d3):
         x1, y1 = p1
@@ -215,10 +254,10 @@ class TrilaterationApp:
             y = (C*D - A*F) / (B*D - A*E)
             return x, y
         except ZeroDivisionError:
-            return 0, 0  # Возвращаем центр при ошибке вычислений
+            return 0, 0
 
     def slider_changed(self, value):
-        self.slider_var.set(float(value))
+        pass
 
     def start(self):
         self.root.mainloop()

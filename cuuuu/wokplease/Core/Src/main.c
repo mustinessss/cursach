@@ -143,94 +143,66 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (adcReady)  // Ждём пока буфер заполнится
-	     {
-	         adcReady = 0; // сброс флага
+	  if (adcReady)
+	  {
+	      adcReady = 0;
 
-	         // Передача значений ADC по UART (10 samples для отладки)
-	         /*for(uint16_t c = 0; c < 3; c++)
-	         {
-	             debug1 = buff[c];
-	             for(a = 0; a < 4; a++) micdebug[a] = '0';
-	             while(debug1 >= 1000) { micdebug[0]++; debug1 -= 1000; }
-	             while(debug1 >= 100)  { micdebug[1]++; debug1 -= 100; }
-	             while(debug1 >= 10)   { micdebug[2]++; debug1 -= 10; }
-	             micdebug[3] += debug1;
-	             HAL_UART_Transmit(&huart2, (uint8_t*)micdebug, 4, 1000);
-	             HAL_UART_Transmit(&huart2, (uint8_t*)"\n", 1, 1000);
-	         }*/
+	      // Вычисление постоянной составляющей
+	      int32_t mean = calculateAverage(buff, ADCIn);
+	      for(uint16_t c = 0; c < ADCIn; c++)
+	      {
+	          buff[c] = buff[c] - mean;
+	      }
 
-	         // Вычисление постоянной составляющей
-	         int32_t mean = calculateAverage(buff, ADCIn);
-	         for(uint16_t c = 0; c < ADCIn; c++)
-	         {
-	             buff[c] = buff[c] - mean;
-	         }
+	      // Взаимная корреляция
+	      autocorr(buff, Bark);
 
-	         // Взаимная корреляция
-	         autocorr(buff, Bark);
+	      distances[speakerNum] = distance;  // Записываем расстояние для текущего динамика
+	      num = 0;
 
-	         distances[speakerNum] = distance;
-	         num = 0;
+	      // ОТПРАВКА ДАННЫХ - ДО увеличения speakerNum
+	      if (speakerNum == 2)
+	      {
+	          // Отправка всех трех расстояний
+	          char output[50];
+	          sprintf(output, "%d,%d,%d\r\n", distances[0], distances[1], distances[2]);
+	          HAL_UART_Transmit(&huart2, (uint8_t*)output, strlen(output), 1000);
 
-	         if (speakerNum == 2)
-	         {
-	             // Отправка маркера начала передачи
-	             HAL_UART_Transmit(&huart2, (uint8_t*)"s\n", 2, 1000);
-	             HAL_Delay(10);
+	          // СБРАСЫВАЕМ speakerNum после отправки всех трех измерений
+	          speakerNum = 0;
+	      }
+	      else
+	      {
+	          // УВЕЛИЧИВАЕМ speakerNum только если это не последний динамик
+	          speakerNum++;
+	      }
 
-	             // Отправка расстояний по одному
-	             for(int i = 0; i < 3; i++) {
-	                 char dist_str[10];
-	                 sprintf(dist_str, "%d\n", distances[i]);
-	                 HAL_UART_Transmit(&huart2, (uint8_t*)dist_str, strlen(dist_str), 1000);
-	                 HAL_Delay(10);
-	             }
-	         }
-	         else
-	         {
-	        	 speakerNum++;
-	         }
-	         // Пересылка расстояния по UART
-	         /*for( a=0; a<3; a++ ) buf[a] = '0';
-	         while( distance>=100 )     { buf[0]++; distance = distance-100; }
-	         while( distance>=10 )       { buf[1]++; distance = distance-10; }
-	         buf[2] += distance;
+	      // Переключаем динамики (теперь speakerNum уже обновлен)
+	      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+	      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+	      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
 
-	         if (speakerNum==0){HAL_UART_Transmit(&huart2,(uint8_t*)"s\n", 2, 1000);}
-	         HAL_UART_Transmit(&huart2,(uint8_t*)buf, a, 1000);
-	         HAL_UART_Transmit(&huart2,(uint8_t*)"\n", 1, 1000);
-	         HAL_Delay(30);*/
-	         // Включаем нужный динамик
-	         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
-	         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-	         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
+	      switch(speakerNum)
+	      {
+	          case 0: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET); break;
+	          case 1: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET); break;
+	          case 2: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET); break;
+	      }
 
-	         switch(speakerNum)
-	         {
-	             case 0: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET); break;
-	             case 1: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET); break;
-	             case 2: HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET); break;
-	         }
+	      // Переключаем светодиод
+	      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
-	         // Переключаем светодиод
-	         HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
-	         // Выбираем следующий динамик
-	         /*speakerNum++;
-	         if(speakerNum > 2) speakerNum = 0;*/
-
-
-	         // Перезапускаем DAC и ADC
-	         HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)Bark, MasSize, DAC_ALIGN_12B_R);
-	         HAL_ADC_Start_IT(&hadc1);
+	      // Перезапускаем DAC и ADC
+	      HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)Bark, MasSize, DAC_ALIGN_12B_R);
+	      HAL_ADC_Start_IT(&hadc1);
+	  }
 	     }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-}
+
 
 /**
   * @brief System Clock Configuration
