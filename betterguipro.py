@@ -101,7 +101,7 @@ class TrilaterationApp:
 
         self.coordinate_value = tk.StringVar()
         self.coordinate_value.set("(0.00 мм, 0.00 мм)")
-        self.coordinate_text = tk.Label(self.root, textvariable=self.coordinate_value, font=("Arial", 10))
+        self.coordinate_text = tk.Label(self.root, textvariable=self.coordinate_value, font=("Arial", 12))
         self.coordinate_text.place(x=612, y=240)
 
         # Статус
@@ -111,16 +111,16 @@ class TrilaterationApp:
         self.status_label.place(x=612, y=280)
 
         # Обозначения под статусом
-        self.legend_speaker1 = tk.Label(self.root, text="■ Динамик 1", fg="red", font=("Arial", 9))
+        self.legend_speaker1 = tk.Label(self.root, text="■ Динамик 1", fg="red", font=("Arial", 12))
         self.legend_speaker1.place(x=612, y=310)
 
-        self.legend_speaker2 = tk.Label(self.root, text="■ Динамик 2", fg="blue", font=("Arial", 9))
+        self.legend_speaker2 = tk.Label(self.root, text="■ Динамик 2", fg="blue", font=("Arial", 12))
         self.legend_speaker2.place(x=612, y=330)
 
-        self.legend_speaker3 = tk.Label(self.root, text="■ Динамик 3", fg="green", font=("Arial", 9))
+        self.legend_speaker3 = tk.Label(self.root, text="■ Динамик 3", fg="green", font=("Arial", 12))
         self.legend_speaker3.place(x=612, y=350)
 
-        self.legend_microphone = tk.Label(self.root, text="● Микрофон", fg="black", font=("Arial", 9))
+        self.legend_microphone = tk.Label(self.root, text="● Микрофон", fg="black", font=("Arial", 12))
         self.legend_microphone.place(x=612, y=370)
 
         # График
