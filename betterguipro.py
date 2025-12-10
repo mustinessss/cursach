@@ -133,7 +133,7 @@ class TrilaterationApp:
             try:
                 self.ser = serial.Serial(
                     port=selected_port,
-                    baudrate=9600,
+                    baudrate=115000,
                     timeout=0.1,
                     write_timeout=1,
                     inter_byte_timeout=0.1
