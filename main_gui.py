@@ -1,15 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
 import serial
-# Гарантируем доступ к исключению SerialException независимо от структуры пакета
-try:
-    SerialException = serial.SerialException
-except Exception:
-    try:
-        from serial import serialutil
-        SerialException = serialutil.SerialException
-    except Exception:
-        SerialException = Exception
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
