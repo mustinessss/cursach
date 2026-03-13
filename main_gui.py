@@ -23,7 +23,7 @@ class TrilaterationApp:
         self.point3 = (250, 0)
 
         # Создание графика
-        self.fig = Figure(figsize=(5, 5), dpi=120)
+        self.fig = Figure(figsize=(5, 5), dpi=120, constrained_layout=True)
         self.ax = self.fig.add_subplot(111)
 
         # Отображение известных точек
@@ -43,19 +43,23 @@ class TrilaterationApp:
         self.unknown_point, = self.ax.plot([0], [0], 'ko', markersize=10, alpha=0.0)
 
         # Настройка графика
-        self.ax.set_aspect('equal')
+        self.ax.set_aspect('auto')
         self.ax.set_xlim([-50, 300])
         self.ax.set_ylim([-50, 300])
+        self.base_xlim = self.ax.get_xlim()
+        self.base_ylim = self.ax.get_ylim()
         self.ax.set_xlabel('X (мм)')
         self.ax.set_ylabel('Y (мм)')
         self.ax.grid(True, alpha=0.3)
 
-        # Создание GUI
+        # Создание GUI (максимизированное окно с декорациями)
         self.root = tk.Tk()
-        self.root.geometry("800x600")
         self.root.title("Обработка данных учебного макета")
+        # Максимальное окно (аналог полноэкранного) — с кнопками управления окном.
+        self.root.state('zoomed')
+        self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
+
         # Получение доступных портов (защищенный импорт)
         try:
             from serial.tools import list_ports
@@ -65,90 +69,115 @@ class TrilaterationApp:
         self.available_ports = [port.device for port in ports]
         print("Доступные порты:", self.available_ports)
 
-        # Элементы управления
-        self.coordinate_units = tk.Label(self.root, text="COM порт:")
-        self.coordinate_units.place(x=612, y=20)
+        # Основная разметка
+        self.main_frame = tk.Frame(self.root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.left_frame = tk.Frame(self.main_frame, bg="#fff")
+        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.right_frame = tk.Frame(self.main_frame, width=260)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        self.right_frame.pack_propagate(False)
+
+        # Элементы управления (правый столбец)
+        pad_x = 12
+        pad_y = 6
+
+        self.coordinate_units = tk.Label(self.right_frame, text="COM порт:")
+        self.coordinate_units.pack(anchor="nw", padx=pad_x, pady=(16, 2))
 
         self.port_var = tk.StringVar(self.root)
         self.port_var.set(self.available_ports[0] if self.available_ports else "")
-        self.port_menu = tk.OptionMenu(self.root, self.port_var, *self.available_ports)
+        self.port_menu = tk.OptionMenu(self.right_frame, self.port_var, *self.available_ports)
         self.port_menu.config(width=20, height=2)
-        self.port_menu.place(x=610, y=50)
+        self.port_menu.pack(anchor="nw", padx=pad_x, pady=2)
 
         # Кнопки управления
-        self.start_button = tk.Button(self.root, text="Старт", command=self.start_program)
+        self.start_button = tk.Button(self.right_frame, text="Старт", command=self.start_program)
         self.start_button.config(width=10, height=2)
-        self.start_button.place(x=612, y=100)
+        self.start_button.pack(anchor="nw", padx=pad_x, pady=(12, 2))
 
-        self.pause_button = tk.Button(self.root, text="Пауза", command=self.pause_program, state=tk.DISABLED)
+        self.pause_button = tk.Button(self.right_frame, text="Пауза", command=self.pause_program, state=tk.DISABLED)
         self.pause_button.config(width=10, height=2)
-        self.pause_button.place(x=693, y=100)
+        self.pause_button.pack(anchor="nw", padx=pad_x, pady=2)
 
-        self.stop_button = tk.Button(self.root, text="Стоп", command=self.stop_program, state=tk.DISABLED)
+        self.stop_button = tk.Button(self.right_frame, text="Стоп", command=self.stop_program, state=tk.DISABLED)
         self.stop_button.config(width=22, height=2)
-        self.stop_button.place(x=611, y=520)
+        self.stop_button.pack(anchor="nw", padx=pad_x, pady=(8, 12))
 
         # Калибровка
         self.slider_var = tk.DoubleVar()
         self.slider_var.set(1.0)
 
-        self.calibration_label = tk.Label(self.root, text="Калибровка:")
-        self.calibration_label.place(x=612, y=150)
+        self.calibration_label = tk.Label(self.right_frame, text="Калибровка:")
+        self.calibration_label.pack(anchor="nw", padx=pad_x, pady=(6, 0))
 
-        self.slider = tk.Scale(self.root, variable=self.slider_var, orient=tk.HORIZONTAL, 
+        self.slider = tk.Scale(self.right_frame, variable=self.slider_var, orient=tk.HORIZONTAL, 
                               from_=0.5, to=1.5, resolution=0.01)
         self.slider.config(width=20, length=160)
-        self.slider.place(x=611, y=170)
+        self.slider.pack(anchor="nw", padx=pad_x, pady=2)
 
         # Координаты
-        self.coordinate_label = tk.Label(self.root, text="Координата точки:")
-        self.coordinate_label.place(x=612, y=220)
+        self.coordinate_label = tk.Label(self.right_frame, text="Координата точки:")
+        self.coordinate_label.pack(anchor="nw", padx=pad_x, pady=(8, 0))
 
         self.coordinate_value = tk.StringVar()
         self.coordinate_value.set("(0.00 мм, 0.00 мм)")
-        self.coordinate_text = tk.Label(self.root, textvariable=self.coordinate_value, font=("Arial", 12))
-        self.coordinate_text.place(x=612, y=240)
+        self.coordinate_text = tk.Label(self.right_frame, textvariable=self.coordinate_value, font=("Arial", 12))
+        self.coordinate_text.pack(anchor="nw", padx=pad_x, pady=2)
 
         # Статус
         self.status_var = tk.StringVar()
         self.status_var.set("Ожидание подключения")
-        self.status_label = tk.Label(self.root, textvariable=self.status_var, fg="blue")
-        self.status_label.place(x=612, y=280)
+        self.status_label = tk.Label(self.right_frame, textvariable=self.status_var, fg="blue")
+        self.status_label.pack(anchor="nw", padx=pad_x, pady=(10, 2))
 
         # Обозначения под статусом
-        self.legend_speaker1 = tk.Label(self.root, text="■ Динамик 1", fg="red", font=("Arial", 12))
-        self.legend_speaker1.place(x=612, y=310)
+        self.legend_speaker1 = tk.Label(self.right_frame, text="■ Динамик 1", fg="red", font=("Arial", 12))
+        self.legend_speaker1.pack(anchor="nw", padx=pad_x, pady=(6, 0))
 
-        self.legend_speaker2 = tk.Label(self.root, text="■ Динамик 2", fg="blue", font=("Arial", 12))
-        self.legend_speaker2.place(x=612, y=330)
+        self.legend_speaker2 = tk.Label(self.right_frame, text="■ Динамик 2", fg="blue", font=("Arial", 12))
+        self.legend_speaker2.pack(anchor="nw", padx=pad_x, pady=(2, 0))
 
-        self.legend_speaker3 = tk.Label(self.root, text="■ Динамик 3", fg="green", font=("Arial", 12))
-        self.legend_speaker3.place(x=612, y=350)
+        self.legend_speaker3 = tk.Label(self.right_frame, text="■ Динамик 3", fg="green", font=("Arial", 12))
+        self.legend_speaker3.pack(anchor="nw", padx=pad_x, pady=(2, 0))
 
-        self.legend_microphone = tk.Label(self.root, text="● Микрофон", fg="black", font=("Arial", 12))
-        self.legend_microphone.place(x=612, y=370)
+        self.legend_microphone = tk.Label(self.right_frame, text="● Микрофон", fg="black", font=("Arial", 12))
+        self.legend_microphone.pack(anchor="nw", padx=pad_x, pady=(2, 8))
 
         # Выбор лабиринта и кнопка старта игры
-        self.maze_label = tk.Label(self.root, text="Лабиринт:")
-        self.maze_label.place(x=612, y=400)
+        self.maze_label = tk.Label(self.right_frame, text="Лабиринт:")
+        self.maze_label.pack(anchor="nw", padx=pad_x, pady=(8, 0))
 
         self.maze_var = tk.StringVar(self.root)
         self.maze_var.set("")
-        self.maze_menu = tk.OptionMenu(self.root, self.maze_var, "")
+        self.maze_menu = tk.OptionMenu(self.right_frame, self.maze_var, "")
         self.maze_menu.config(width=20)
-        self.maze_menu.place(x=612, y=420)
+        self.maze_menu.pack(anchor="nw", padx=pad_x, pady=2)
 
-        self.load_maze_button = tk.Button(self.root, text="Загрузить лабиринт", command=self.on_load_maze_button)
+        self.load_maze_button = tk.Button(self.right_frame, text="Загрузить лабиринт", command=self.on_load_maze_button)
         self.load_maze_button.config(width=20, height=1)
-        self.load_maze_button.place(x=612, y=450)
+        self.load_maze_button.pack(anchor="nw", padx=pad_x, pady=(2, 2))
 
-        self.start_game_button = tk.Button(self.root, text="Запустить игру", command=self.on_start_game_button)
+        self.start_game_button = tk.Button(self.right_frame, text="Запустить игру", command=self.on_start_game_button)
         self.start_game_button.config(width=20, height=2)
-        self.start_game_button.place(x=612, y=480)
+        self.start_game_button.pack(anchor="nw", padx=pad_x, pady=(2, 10))
 
         # График
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-        self.canvas.get_tk_widget().place(x=0, y=0)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.left_frame)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill=tk.BOTH, expand=True)
+        # Отключаем динамическое изменение размеров (окно создаётся сразу достаточно большим).
+        # self.canvas_widget.bind("<Configure>", self.on_canvas_resize)
+
+        # Сохранение пропорций графика во время изменения размера
+        self.ax.set_aspect('equal', adjustable='box')
+
+    def on_canvas_resize(self, event):
+        # Не изменяем масштаб при каждом изменении размера окна —
+        # окно создаётся сразу достаточного размера для отображения всего графика.
+        pass
 
     def start_program(self):
         selected_port = self.port_var.get()
