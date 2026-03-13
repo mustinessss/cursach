@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import serial
 import matplotlib
 matplotlib.use("TkAgg")
@@ -138,9 +138,13 @@ class TrilaterationApp:
         self.maze_menu.config(width=20)
         self.maze_menu.place(x=612, y=420)
 
+        self.load_maze_button = tk.Button(self.root, text="Загрузить лабиринт", command=self.on_load_maze_button)
+        self.load_maze_button.config(width=20, height=1)
+        self.load_maze_button.place(x=612, y=450)
+
         self.start_game_button = tk.Button(self.root, text="Запустить игру", command=self.on_start_game_button)
         self.start_game_button.config(width=20, height=2)
-        self.start_game_button.place(x=612, y=460)
+        self.start_game_button.place(x=612, y=480)
 
         # График
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
@@ -310,6 +314,35 @@ class TrilaterationApp:
         started = self.game.start_game()
         if started:
             self.status_var.set(f"Игра: {maze_name}")
+
+    def on_load_maze_button(self):
+        """Обработчик кнопки загрузки лабиринта из файла"""
+        if not hasattr(self, 'game') or not self.game:
+            messagebox.showwarning("Загрузка лабиринта", "Инициализируйте игру сначала.")
+            return
+        
+        # Открываем диалог выбора файла
+        file_path = filedialog.askopenfilename(
+            title="Выберите файл лабиринта",
+            filetypes=[("JSON файлы", "*.json"), ("Все файлы", "*.*")],
+            initialdir="."
+        )
+        
+        if not file_path:
+            return  # Пользователь отменил выбор
+        
+        # Загружаем лабиринт
+        maze = MazeLoader.load_maze(file_path)
+        if maze:
+            # Регистрируем лабиринт в игре
+            self.game.register_maze(maze)
+            # Обновляем меню лабиринтов
+            self.update_maze_menu()
+            # Выбираем загруженный лабиринт
+            self.maze_var.set(maze.name)
+            messagebox.showinfo("Загрузка лабиринта", f"Лабиринт '{maze.name}' успешно загружен!")
+        else:
+            messagebox.showerror("Ошибка загрузки", f"Не удалось загрузить лабиринт из файла:\n{file_path}")
 
     def start(self):
         self.root.mainloop()
