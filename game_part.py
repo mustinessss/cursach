@@ -45,7 +45,6 @@ class BaseMaze(ABC):
     
     def validate(self):
         """Проверка корректности лабиринта"""
-        # Проверяем, что старт и финиш не на стенах
         for wall in self.walls:
             if self._point_on_segment(self.start_pos, wall[0], wall[1]):
                 print(f"Предупреждение: старт {self.start_pos} близко к стене {wall}")
@@ -109,8 +108,6 @@ class SimpleMaze(BaseMaze):
         return (210, 210)
 
 class HardMaze(BaseMaze):
-    """Сложный лабиринт с большим количеством препятствий"""
-    
     @property
     def name(self):
         return "Сложный лабиринт"
@@ -147,41 +144,6 @@ class HardMaze(BaseMaze):
     @property
     def wall_color(self):
         return 'darkred'
-
-class MazeWithIsland(BaseMaze):
-    """Лабиринт с островком посередине"""
-    
-    @property
-    def name(self):
-        return "Лабиринт с островом"
-    
-    @property
-    def walls(self):
-        return [
-            # Внешние стены
-            [[0, 0], [250, 0]],
-            [[0, 250], [250, 250]],
-            [[0, 0], [0, 250]],
-            [[250, 0], [250, 250]],
-            
-            # Остров в центре
-            [[100, 100], [150, 100]],
-            [[150, 100], [150, 150]],
-            [[150, 150], [100, 150]],
-            [[100, 150], [100, 100]],
-            
-            # Проходы
-            [[50, 50], [200, 50]],
-            [[50, 200], [200, 200]],
-        ]
-    
-    @property
-    def start_pos(self):
-        return (30, 220)
-    
-    @property
-    def finish_pos(self):
-        return (220, 30)
 
 # ====================== КЛАСС ИГРЫ ======================
 
@@ -452,7 +414,6 @@ class MazeLoader:
     def save_maze(maze, filename):
         """
         Сохраняет лабиринт в JSON файл
-        
         Параметры:
         - maze: экземпляр BaseMaze
         - filename: имя файла для сохранения
